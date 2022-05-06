@@ -64,14 +64,14 @@ SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = load_keys()
 # Method to send a simple Empty ACK message to a address
 def sendEmptyACK(s, address):
     print(f'  [{s}] Sending empty ACK to Client')
-    p= packetFormat.packetFormat(True, False, False, s, None, None, None, False)
-    serverSocket.sendto(p.encryptedBytes, address)
+    p= packetFormat.packetFormat(s, True, False, False, None, None, None)
+    serverSocket.sendto(p.getEncryptedBytes(), address)
 
 # Method to send a empty FIN ACK message to a address
 def sendEmptyFinAck(s, address):
     print(f'  [{s}] Sending FIN ACK to Client')
-    p = packetFormat.packetFormat(True, False, True, s, None, None, None, False)
-    serverSocket.sendto(p.encryptedBytes, address)
+    p = packetFormat.packetFormat(s, True, False, True,  None, None, None)
+    serverSocket.sendto(p.getEncryptedBytes(), address)
 
 # Method to recive an empty ACK message
 def recvEmptyACK(type, s):
@@ -99,30 +99,31 @@ def recvEmptyFinAck(s):
 def rsaExchange(payload, address):
     # Recieving Public Key from Clinet
     print("  [0] Client Public Key Recieved")
+    print(payload)
     client_public_key = rsa.PublicKey.load_pkcs1(payload)
 
     complete = False
     while not complete:
         try:
             # Sending ACK for Reciving Client Public Key
-            sequenceCheck = 0
-            sendEmptyACK(sequenceCheck, address)
+            sequence = 0
+            sendEmptyACK(sequence, address)
 
             # Sending Server Public Key to Client
-            sequenceCheck = sequenceCheck + 1
-            print(f"  [{sequenceCheck}] Sending Server Public Key to Client")
+            sequence = sequence + 1
+            print(f"  [{sequence}] Sending Server Public Key to Client")
             server_public_key_bytes = SERVER_PUBLIC_KEY.save_pkcs1()
-            p = packetFormat.packetFormat(True, True, False, sequenceCheck, None, None, server_public_key_bytes, True)
-            serverSocket.sendto(p.encryptedBytes, address)
+            p = packetFormat.packetFormat(sequence, True, True, False, None, None, server_public_key_bytes)
+            serverSocket.sendto(p.getEncryptedBytes(), address)
 
             # ACKS for stop wait
-            recvEmptyACK("Server Public Key", sequenceCheck)
-            sequenceCheck = sequenceCheck + 1
-            recvEmptyFinAck(sequenceCheck)
-            sendEmptyACK(sequenceCheck, address)
-            sequenceCheck = sequenceCheck + 1
-            sendEmptyFinAck(sequenceCheck, address)
-            complete = recvEmptyACK('',sequenceCheck)
+            recvEmptyACK("Server Public Key", sequence)
+            sequence = sequence + 1
+            recvEmptyFinAck(sequence)
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
+            sendEmptyFinAck(sequence, address)
+            complete = recvEmptyACK('',sequence)
 
         except socket.timeout:
             print('  Socket Timeout, resending...')
@@ -132,23 +133,23 @@ def rsaExchange(payload, address):
 
 def newClient(client_id, address):
 
-    sequenceCheck = 0
-    sendEmptyACK(sequenceCheck, address)
-    print(f"  [{sequenceCheck}] Sending ID:{client_id[6:]} to the Client")
-    sequenceCheck = sequenceCheck + 1
-    p = packetFormat.packetFormat(True, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, client_id, False)
-    serverSocket.sendto(p.encryptedBytes, address)
+    sequence = 0
+    sendEmptyACK(sequence, address)
+    print(f"  [{sequence}] Sending ID:{client_id[6:]} to the Client")
+    sequence = sequence + 1
+    p = packetFormat.packetFormat(sequence, True, False, False, None, CLIENT_PUBLIC_KEY, client_id)
+    serverSocket.sendto(p.getEncryptedBytes(), address)
    
     completed  = False
     while not completed:
         try:
-            recvEmptyACK("Clinet ID", sequenceCheck)
-            sequenceCheck = sequenceCheck + 1
-            recvEmptyFinAck(sequenceCheck)
-            sendEmptyACK(sequenceCheck, address)
-            sequenceCheck = sequenceCheck + 1
-            sendEmptyFinAck(sequenceCheck, address)
-            completed = recvEmptyACK('', sequenceCheck)
+            recvEmptyACK("Clinet ID", sequence)
+            sequence = sequence + 1
+            recvEmptyFinAck(sequence)
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
+            sendEmptyFinAck(sequence, address)
+            completed = recvEmptyACK('', sequence)
             print('Client ID successfully Sent to Client')
 
         except socket.timeout:
@@ -179,28 +180,28 @@ def sendOrder(message, address):
     completed = False
     while not completed:
         try:
-            sequenceCheck = 0
+            sequence = 0
 
-            sendEmptyACK(sequenceCheck, address)
+            sendEmptyACK(sequence, address)
 
             # Send Drink Total to Client
-            p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, message, False)
-            serverSocket.sendto(p.encryptedBytes, address)
+            p = packetFormat.packetFormat(sequence, False, False, False, None, CLIENT_PUBLIC_KEY, message)
+            serverSocket.sendto(p.getEncryptedBytes(), address)
 
-            recvEmptyACK('New Total ', sequenceCheck)
-            sequenceCheck = sequenceCheck + 1
-            recvEmptyFinAck(sequenceCheck)
-            sendEmptyACK(sequenceCheck, address)
-            sequenceCheck = sequenceCheck + 1
-            sendEmptyFinAck(sequenceCheck, address)
+            recvEmptyACK('New Total ', sequence)
+            sequence = sequence + 1
+            recvEmptyFinAck(sequence)
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
+            sendEmptyFinAck(sequence, address)
 
-            completed = recvEmptyACK('',sequenceCheck)
+            completed = recvEmptyACK('',sequence)
             if completed == True:
-                sendEmptyACK(sequenceCheck, address)
+                sendEmptyACK(sequence, address)
             else:
                 # Sending invalid packet
-                p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, None, None, False)
-                serverSocket.sendto(p.encryptedBytes, address)
+                p = packetFormat.packetFormat(sequence, False, False, False, None, None, None)
+                serverSocket.sendto(p.getEncryptedBytes(), address)
 
         except socket.timeout:
             print('  Socket Timeout, resending...')
@@ -210,33 +211,32 @@ def sendOrder(message, address):
 
 def closeClinet(message, address):
     socket.timeout(2)
-    sequenceCheck = 0
+    sequence = 0
     completed = False
     while not completed:
         try:
-            #sendEmptyACK(sequenceCheck, address)
-            p = packetFormat.packetFormat(True, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, message , False)
-            serverSocket.sendto(p.encryptedBytes, address)
+            #sendEmptyACK(sequence, address)
+            p = packetFormat.packetFormat(sequence, True, False, False, None, CLIENT_PUBLIC_KEY, message)
+            serverSocket.sendto(p.getEncryptedBytes(), address)
 
-            recvEmptyACK('',sequenceCheck)
-            sequenceCheck = sequenceCheck + 1
-            recvEmptyFinAck(sequenceCheck)
-            sendEmptyACK(sequenceCheck, address)
-            sequenceCheck = sequenceCheck + 1
-            sendEmptyFinAck(sequenceCheck, address)
+            recvEmptyACK('',sequence)
+            sequence = sequence + 1
+            recvEmptyFinAck(sequence)
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
+            sendEmptyFinAck(sequence, address)
 
-            completed = recvEmptyACK('',sequenceCheck)
+            completed = recvEmptyACK('',sequence)
             if(completed == True):
-                sendEmptyACK(sequenceCheck, address)
+                sendEmptyACK(sequence, address)
             else:
                 # Send Imvalid ACK
-                p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, None, None, False)
-                serverSocket.sendto(p.encryptedBytes, address)
+                p = packetFormat.packetFormat(sequence, False, False, False, None, None, None)
+                serverSocket.sendto(p.getEncryptedBytes(), address)
 
         except socket.timeout:
             print('  Error, Socket Timeout, resending...')
     socket.timeout(None)
-   
 
 
 while True:
@@ -257,7 +257,6 @@ while True:
 
         if(payload != False):
             split_payload = payload.split(' ')
-            print(split_payload)
 
             if payload == 'OPEN':
                 print(f"\nRecived packet OPEN from {address}")
