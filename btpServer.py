@@ -3,7 +3,7 @@ import random
 import rsa
 from bitarray import bitarray
 import time
-import random
+import packetFormat
 
 activeClients = []
 DRINKS = [['Beer', 1.65], ['Cider', 1.40], ['Wine', 4.99], ['Vodka', 2.49], ['Whisky', 3.00] ,['Cola', 1.20]]
@@ -38,187 +38,252 @@ def decrypt(ciphertext, key):
     except:
         return False
 
-def sign_sha1(msg, key):
-    return rsa.sign(msg.encode('ascii'), key, 'SHA-1')
-
-def verify_sha1(msg, signature, key):
-    try:
-        return rsa.verify(msg.encode('ascii'), signature, key) == 'SHA-1'
-    except:
-        return False
-
 #################
 #  SERVER CODE  #
 #################
 
 
-def decodeHeader(header):
-    seq = header[0:4].lstrip()
-    if(seq != '0000'):
-        length = header[5:]
-        f1 = ("%08d" % (int(bin(ord(header[4]))[2:]), ))
-        f2 = ("%08d" % (int(bin(ord(header[5]))[2:]), ))
-        flags = bitarray(f1+f2)
-        return seq, flags, length
-    else:
-        return '0000', bitarray('00000000'), 4
 
-def decodePayload(ibPaylaod):
-    client_ID = int(ibPaylaod[:4])
-    data = ibPaylaod[4:]
-    return client_ID, data
+
+
+def decodePacket(packet):
+    sequence = int.from_bytes(packet[0:4], byteorder='big')
+    flags = bitarray(endian='big')
+    flags.frombytes(packet[4:6])
+    length = int.from_bytes(packet[6:8], byteorder='big')
+    payload = packet[8:]
+    return sequence, flags, length, payload
+
 
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-serverSocket.bind(('', 1234))
+serverSocket.bind(('', 12000))
 print("\nServer Running...")
 generate_keys()
 SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = load_keys()
 
-def finishRequest(address):
-    time.sleep(waitTime)
-    acknowledged = False
-    while not acknowledged:
-        ack, address = serverSocket.recvfrom(4096)
-        acknowledged = True
-        # Bytes form 5 -> 101 Flags
-        packet = ack[:4] + b'501 '
-        serverSocket.sendto(packet, address)
-        print("Finish ACK recieved from client")
+# Method to send a simple Empty ACK message to a address
+def sendEmptyACK(s, address):
+    print(f'  [{s}] Sending empty ACK to Client')
+    p= packetFormat.packetFormat(True, False, False, s, None, None, None, False)
+    serverSocket.sendto(p.encryptedBytes, address)
+
+# Method to send a empty FIN ACK message to a address
+def sendEmptyFinAck(s, address):
+    print(f'  [{s}] Sending FIN ACK to Client')
+    p = packetFormat.packetFormat(True, False, True, s, None, None, None, False)
+    serverSocket.sendto(p.encryptedBytes, address)
+
+# Method to recive an empty ACK message
+def recvEmptyACK(type, s):
+    packet, address = serverSocket.recvfrom(4096)
+    inSequence, inFlags, inLength, inPayload = decodePacket(packet)
+    if inFlags[0] == 1:
+        print(f'  [{s}] {type}Empty ACK recieved from Client')
+        return True
+    else:
+        print(f'  [{s}] {type}ERROR, Invalid ACK recieved from Client')
+        return False
+
+# Method to revive an empty FIN ACK message
+def recvEmptyFinAck(s):
+    packet, address = serverSocket.recvfrom(4096)
+    inSequence, inFlags, inLength, inPayload = decodePacket(packet)
+    if inFlags[2] == 1:
+        print(f'  [{s}] FIN ACK recieved from Client')
+        return True
+    else:
+        print(f'  [{s}] ERROR, Invalid FIN ACK recieved from Client')
+        return False
 
 
-def rsaExchange(header, address):
-    print("\nRSA Exchange with Client\nClient Public Key Recieved")
-    client_public_key = rsa.PublicKey.load_pkcs1(packet[9:])
-    server_public_key_bytes = SERVER_PUBLIC_KEY.save_pkcs1()
-    
-    print(f"Sending...\n\t{header} [Server Public Key]")
-    header_bytes = bytes(header, 'ascii')
-    outPacket = header_bytes + server_public_key_bytes
+def rsaExchange(payload, address):
+    # Recieving Public Key from Clinet
+    print("  [0] Client Public Key Recieved")
+    client_public_key = rsa.PublicKey.load_pkcs1(payload)
 
-    time.sleep(waitTime)
-    serverSocket.sendto(outPacket, address)
-
-    # RECIEVE ACK
-    serverSocket.settimeout(2)
-    acknowledged = False
-    while not acknowledged:
+    complete = False
+    while not complete:
         try:
-            ack, address = serverSocket.recvfrom(4096)
-            ack = ack.decode('ascii')
-            sequence = ack[:3]
-            # TEMP BIT ARRAY IS BEING A BITCH SO ONLY WAY IT WILL WORK
-            if(ack[4] == '3'):
-                flags = str(bin(int(ack[4])))
-                flags = flags[2:]
-            else:
-                f1 = ("%08d" % (int(bin(ord(header[4]))[2:]), ))
-                f2 = ("%08d" % (int(bin(ord(header[5]))[2:]), ))
-                flags = bitarray(f1+f2)
+            # Sending ACK for Reciving Client Public Key
+            sequenceCheck = 0
+            sendEmptyACK(sequenceCheck, address)
 
-            if(flags[0] == '1' or flags[0] == 1):
-                print("ack recieved from client")
-                acknowledged = True
-                break
-            else:
-                print("Error, no ack recieved from client")
-                equence = str(int(sequence) + 1)
-                sequenceStr = str(sequence)
-                sequenceStr = sequenceStr.zfill(4)
-                header = bytes(sequenceStr, 'ascii') + bytes(str(flags), 'ascii') + bytes(length, 'ascii')
-                outPacket = header + bytes('err', 'ascii')
+            # Sending Server Public Key to Client
+            sequenceCheck = sequenceCheck + 1
+            print(f"  [{sequenceCheck}] Sending Server Public Key to Client")
+            server_public_key_bytes = SERVER_PUBLIC_KEY.save_pkcs1()
+            p = packetFormat.packetFormat(True, True, False, sequenceCheck, None, None, server_public_key_bytes, True)
+            serverSocket.sendto(p.encryptedBytes, address)
+
+            # ACKS for stop wait
+            recvEmptyACK("Server Public Key", sequenceCheck)
+            sequenceCheck = sequenceCheck + 1
+            recvEmptyFinAck(sequenceCheck)
+            sendEmptyACK(sequenceCheck, address)
+            sequenceCheck = sequenceCheck + 1
+            sendEmptyFinAck(sequenceCheck, address)
+            complete = recvEmptyACK('',sequenceCheck)
 
         except socket.timeout:
-            print("Error, not ack recieved from client")
-            sequence = str(int(sequence) + 1)
-            sequenceStr = str(sequence)
-            sequenceStr = sequenceStr.zfill(4)
-            header = bytes(sequenceStr, 'ascii') +  bytes(str(flags), 'ascii')+ bytes(length, 'ascii')
-            outPacket = header + bytes('err', 'ascii')
-   
-        print("RSA exchange completed")
-        break
+            print('  Socket Timeout, resending...')
 
-    serverSocket.settimeout(None)
-    finishRequest(address)
+    socket.timeout(None)
     return client_public_key
 
-def newClient(address):
-    time.sleep(waitTime)
-    print("\nOPENING TAB")
-    client_id = random.randint(1000,9999)
-    activeClients.append([client_id, 0])
+def newClient(client_id, address):
 
-    seq = b'0001'
-    flags = bitarray()
-    flags.extend([0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0])
-    flags = flags.tobytes()
-    length = b'4'
-    header = seq + flags + length    
+    sequenceCheck = 0
+    sendEmptyACK(sequenceCheck, address)
+    print(f"  [{sequenceCheck}] Sending ID:{client_id[6:]} to the Client")
+    sequenceCheck = sequenceCheck + 1
+    p = packetFormat.packetFormat(True, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, client_id, False)
+    serverSocket.sendto(p.encryptedBytes, address)
+   
+    completed  = False
+    while not completed:
+        try:
+            recvEmptyACK("Clinet ID", sequenceCheck)
+            sequenceCheck = sequenceCheck + 1
+            recvEmptyFinAck(sequenceCheck)
+            sendEmptyACK(sequenceCheck, address)
+            sequenceCheck = sequenceCheck + 1
+            sendEmptyFinAck(sequenceCheck, address)
+            completed = recvEmptyACK('', sequenceCheck)
+            print('Client ID successfully Sent to Client')
 
-    client_id_str ='SETID ' + str(client_id)
-    print(client_id_str)
-    
-    cipherText = encrypt(client_id_str, CLIENT_PUBLIC_KEY)
-    serverSocket.sendto(header + cipherText, address)
+        except socket.timeout:
+            print('  Socket Timeout, resending...')
 
-    
+    socket.timeout(None)
+   
 def addOrder(clientID, drink, quantity, address):
+    print(f"\nAdding {quantity} to {DRINKS[drink][0]}(s) to {clientID}'s order")
     for i in range(len(activeClients)):
         if activeClients[i][0] == int(clientID):
             total = activeClients[i][1]
+            print(f"  [0] Previous Total {total} for Client {client_id}")
             total = total + (DRINKS[drink][1] * float(quantity))
             activeClients[i][1] = total
 
             str_total = "{:.2f}".format(total)
-            print(f"  Adding {quantity} to {DRINKS[drink][0]}(s) to {clientID}'s order")
-            print(f"  {clientID}'s new total is £{str_total}")
+            print(f"  [0] {clientID}'s new total is £{str_total}")
 
+            print(f"  [0] Sending TOTAL {str_total} to the Client")
             message = 'TOTAL ' + str(str_total)
-            cipherText = encrypt('00000000' + message, CLIENT_PUBLIC_KEY)
-            serverSocket.sendto(cipherText, address)
+            socket.timeout(2)
+            sendOrder(message, address)
+            
 
-def closeClinet(clientID, address):
-    for i in range(len(activeClients)):
-        if(activeClients[i][0] == int(clientID)):
+def sendOrder(message, address):
+    socket.timeout(2)
+    completed = False
+    while not completed:
+        try:
+            sequenceCheck = 0
+
+            sendEmptyACK(sequenceCheck, address)
+
+            # Send Drink Total to Client
+            p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, message, False)
+            serverSocket.sendto(p.encryptedBytes, address)
+
+            recvEmptyACK('New Total ', sequenceCheck)
+            sequenceCheck = sequenceCheck + 1
+            recvEmptyFinAck(sequenceCheck)
+            sendEmptyACK(sequenceCheck, address)
+            sequenceCheck = sequenceCheck + 1
+            sendEmptyFinAck(sequenceCheck, address)
+
+            completed = recvEmptyACK('',sequenceCheck)
+            if completed == True:
+                sendEmptyACK(sequenceCheck, address)
+            else:
+                # Sending invalid packet
+                p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, None, None, False)
+                serverSocket.sendto(p.encryptedBytes, address)
+
+        except socket.timeout:
+            print('  Socket Timeout, resending...')
             
-            total = activeClients[i][1]
-            print(f"{clientID} final bill is: £{total}")
-            
-            message = 'TOTAL ' + str(total)
-            cipherText = encrypt('00000000' + message, CLIENT_PUBLIC_KEY)
-            serverSocket.sendto(cipherText, address)
-            #activeClients.remove(activeClients[i].index)
+    socket.timeout(None)
+    print("Order Successfully added to tab")
+
+def closeClinet(message, address):
+    socket.timeout(2)
+    sequenceCheck = 0
+    completed = False
+    while not completed:
+        try:
+            #sendEmptyACK(sequenceCheck, address)
+            p = packetFormat.packetFormat(True, False, False, sequenceCheck, None, CLIENT_PUBLIC_KEY, message , False)
+            serverSocket.sendto(p.encryptedBytes, address)
+
+            recvEmptyACK('',sequenceCheck)
+            sequenceCheck = sequenceCheck + 1
+            recvEmptyFinAck(sequenceCheck)
+            sendEmptyACK(sequenceCheck, address)
+            sequenceCheck = sequenceCheck + 1
+            sendEmptyFinAck(sequenceCheck, address)
+
+            completed = recvEmptyACK('',sequenceCheck)
+            if(completed == True):
+                sendEmptyACK(sequenceCheck, address)
+            else:
+                # Send Imvalid ACK
+                p = packetFormat.packetFormat(False, False, False, sequenceCheck, None, None, None, False)
+                serverSocket.sendto(p.encryptedBytes, address)
+
+        except socket.timeout:
+            print('  Error, Socket Timeout, resending...')
+    socket.timeout(None)
+   
+
 
 while True:
     # Assigns a random amount of time to simulate packet loss
     waitTime = random.randint(0,3)
 
     packet, address = serverSocket.recvfrom(4096)
-    header = packet[0:8]
-    header = header.decode("ascii")
-    sequnce, flags, length = decodeHeader(header)
+    sequence, flags, length, payload = decodePacket(packet)
 
+    time.sleep(waitTime)
     # RSA KEY EXCHAGE
     if flags[1] == 1:
-        CLIENT_PUBLIC_KEY = rsaExchange(header, address)
+        print("RSA Exchange with Client")
+        CLIENT_PUBLIC_KEY = rsaExchange(payload, address)
+        print('RSA exchange completed')
     else:
-        payload = decrypt(packet[8:], SERVER_PRIVATE_KEY)
-        
+        payload = decrypt(payload, SERVER_PRIVATE_KEY)
+
         if(payload != False):
+            split_payload = payload.split(' ')
+            print(split_payload)
+
             if payload == 'OPEN':
                 print(f"\nRecived packet OPEN from {address}")
-                newClient(address)
+                client_id = random.randint(1000,9999)
+                activeClients.append([client_id, 0])
+                client_id_str ='SETID ' + str(client_id)
+                print(f"  [0] {client_id_str}")
+                newClient(client_id_str, address)
+
+            elif split_payload[2] == 'CLOSE':
+                cID = split_payload[1]
+                cID = cID[:4]
+                print(f"\nClosing Client {cID}")
+                for i in range(len(activeClients)):
+                    if(activeClients[i][0] == int(cID)):
+                        total = activeClients[i][1]
+                        message = 'TOTAL' + str(total)
+                        closeClinet(message, address)
+                        print(f"{cID} successfully removed from Server")
 
             else:
-                if(payload[4:] == "CLOSE"):
-                    print(f"\nRecived packet CLOSE from {address}")
-                    closeClinet(payload[:4], address)
-                else:
-                    print(f"\nRecieved packet {payload[3:6]} {payload[10:]} from {address}")
-                    data = payload.split('\r\n')
-                    cID = data[0][3:]
-                    drinkData = data[1].split(' ')
-                    drink = str(drinkData[1].lstrip())
-                    drink = int(drink) - 1
-                    quantity = drinkData[2]
-                    addOrder(cID, drink, quantity, address)
+                data = payload.split('\r\n')
+                cID = data[0][3:]
+                drinkData = data[1].split(' ')
+                drink = str(drinkData[1].lstrip())
+                drink = int(drink) - 1
+                quantity = drinkData[2]
+                print(drink)
+                addOrder(cID, drink, quantity, address)
