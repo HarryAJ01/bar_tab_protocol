@@ -25,7 +25,7 @@ def decodePacket(packet):
 
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 serverSocket.bind(('', 12000))
-"\nServer Running...")
+print("\nServer Running...")
 SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = rsa.newkeys(512, accurate=True)
 TIMEOUT = 5
 BUFFER = 4096
@@ -151,8 +151,9 @@ def sendOrder(message, address):
         try:
             sequence = 0
 
-            #sendEmptyACK(sequence, address)
-
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
+            
             # Send Drink Total to Client
             p = packetFormat.packetFormat(sequence, False, False, False, None, CLIENT_PUBLIC_KEY, message)
             serverSocket.sendto(p.getEncryptedBytes(), address)
