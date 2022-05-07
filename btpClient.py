@@ -173,7 +173,7 @@ def openTab():
 
 def closeTab():
     print(f'Closing {CLIENT_ID} tab')
-    payload = "ID " + CLIENT_ID + "\r\n CLOSE"
+    payload = "ID " + CLIENT_ID + "\r\nCLOSE"
     sequence = 0
     plainText = ''
 
@@ -224,7 +224,7 @@ def addDrink(drink_name, drink_id, quantity):
     p = packetFormat.packetFormat(0, False, False, False, None, SERVER_PUBLIC_KEY, payload)
     clientSocket.sendto(p.getEncryptedBytes(), (UDP_IP_ADDRESS, UDP_PORT_NO))
 
-    recvEmptyACK('', 0)
+    recvEmptyACK('', 1)
 
     plainText = 'TOTAL 0'
     socket.timeout(TIMEOUT)
@@ -239,7 +239,7 @@ def addDrink(drink_name, drink_id, quantity):
                 plainText = rsa.decrypt(inPayload, CLIENT_PRIVATE_KEY)
                 
                 if(plainText == False):
-                    print("Corrupted packet please try again")
+                    print("  Corrupted packet please try again")
 
                 else:
                     plainText = plainText.decode('ASCII')
