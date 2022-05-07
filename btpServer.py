@@ -153,7 +153,7 @@ def sendOrder(message, address):
 
             sendEmptyACK(sequence, address)
             sequence = sequence + 1
-            
+
             # Send Drink Total to Client
             p = packetFormat.packetFormat(sequence, False, False, False, None, CLIENT_PUBLIC_KEY, message)
             serverSocket.sendto(p.getEncryptedBytes(), address)
@@ -225,7 +225,7 @@ while True:
         payload = decrypt(payload, SERVER_PRIVATE_KEY)
 
         if(payload != False):
-            split_payload = payload.split(' ')
+            split_payload = payload.split('\r\n')
 
             if payload == 'OPEN':
                 print(f"\nRecived packet OPEN from {address}")
@@ -235,7 +235,7 @@ while True:
                 print(f"  [0] {client_id_str}")
                 newClient(client_id_str, address)
 
-            elif split_payload[2] == 'CLOSE':
+            elif split_payload[1] == 'CLOSE':
                 cID = split_payload[1]
                 cID = cID[:4]
                 print(f"\nClosing Client {cID}")
