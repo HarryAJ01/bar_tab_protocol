@@ -23,41 +23,19 @@ print("""
 -> or enter 0 to close the tab
 """)
 
-
-CLIENT_ID = None
-SERVER_PUBLIC_KEY = None
-
-####################
-#  RSA ENCRYPTION  #
-####################
-
-def generate_keys():
-    (pubKey, privKey) = rsa.newkeys(512, accurate=True)
-    with open('keys/pubkey.pem', 'wb') as f:
-        f.write(pubKey.save_pkcs1('PEM'))
-
-    with open('keys/privkey.pem', 'wb') as f:
-        f.write(privKey.save_pkcs1('PEM'))
-
-def load_keys():
-    with open('keys/pubkey.pem', 'rb') as f:
-        pubKey = rsa.PublicKey.load_pkcs1(f.read())
-
-    with open('keys/privkey.pem', 'rb') as f:
-        privKey = rsa.PrivateKey.load_pkcs1(f.read())
-
-    return pubKey, privKey
-
-#####################
-# SOCKET METADATA   #
-#####################
+#######################
+#   SOCKET METADATA   #
+#######################
 
 UDP_IP_ADDRESS = "127.0.0.1"
 UDP_PORT_NO = 12000
 clientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-generate_keys()
-CLIENT_PUBLIC_KEY, CLIENT_PRIVATE_KEY = load_keys()
+CLIENT_PUBLIC_KEY, CLIENT_PRIVATE_KEY = rsa.newkeys(512, accurate=True)
+TIMEOUT = 5
+BUFFER = 4096
 
+CLIENT_ID = None
+SERVER_PUBLIC_KEY = None
 
 #################
 #  CLIENT CODE  #
@@ -87,7 +65,7 @@ def sendEmptyFinAck(s):
 
 # Method to recive an empty ACK message
 def recvEmptyACK(type, s):
-    packet, address = clientSocket.recvfrom(4096)
+    packet, address = clientSocket.recvfrom(BUFFER)
     inSequence, inFlags, inLength, inPayload = decodePacket(packet)
     if inFlags[0] == 1 and inSequence == s:
         print(f'  [{s}] {type} EMPTY ACK recieved from Server')
@@ -98,7 +76,7 @@ def recvEmptyACK(type, s):
 
 # Method to revive an empty FIN ACK message
 def recvEmptyFinAck(s):
-    packet, address = clientSocket.recvfrom(4096)
+    packet, address = clientSocket.recvfrom(BUFFER)
     inSequence, inFlags, inLength, inPayload = decodePacket(packet)
 
     if inFlags[0] == 1 & inFlags[2] == 1:
@@ -113,7 +91,7 @@ def rsaExchange():
     global SERVER_PUBLIC_KEY
     sequence = 0
     completed = False
-    socket.timeout(2)
+    socket.timeout(TIMEOUT)
     while not completed:
         try:
             print(f"  [{sequence}] Sending RSA Client Public Key")
@@ -123,7 +101,7 @@ def rsaExchange():
             recvEmptyACK('', sequence)
 
             sequence += 1
-            packet, address = clientSocket.recvfrom(4096)
+            packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
             if inFlags[0] == 1 & inFlags[1] == 1:
                 SERVER_PUBLIC_KEY = rsa.PublicKey.load_pkcs1(inPayload)
@@ -156,7 +134,7 @@ def openTab():
         sequence += 1
 
         # ID Recieve
-        packet, address = clientSocket.recvfrom(4096)
+        packet, address = clientSocket.recvfrom(BUFFER)
         inSequence, inFlags, inLength, inPayload = decodePacket(packet)
         plainText = rsa.decrypt(inPayload, CLIENT_PRIVATE_KEY)
         plainText = plainText.decode('ASCII')
@@ -203,13 +181,13 @@ def closeTab():
     p = packetFormat.packetFormat(sequence, False, False, False, None, SERVER_PUBLIC_KEY, payload)
     clientSocket.sendto(p.getEncryptedBytes(), (UDP_IP_ADDRESS, UDP_PORT_NO))
 
-    socket.timeout(2)
+    socket.timeout(TIMEOUT)
     completed = False
     while not completed:
         try:
             recvEmptyACK('', sequence)
 
-            packet, address = clientSocket.recvfrom(4096)
+            packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
 
             plainText = rsa.decrypt(inPayload, CLIENT_PRIVATE_KEY)
@@ -249,13 +227,13 @@ def addDrink(drink_name, drink_id, quantity):
     recvEmptyACK('', 0)
 
     plainText = 'TOTAL 0'
-    socket.timeout(2)
+    socket.timeout(TIMEOUT)
     completed = False
     while not completed: 
         try: 
             sequence = 0
             socket.timeout(None)
-            packet, address = clientSocket.recvfrom(4096)
+            packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
             if(inPayload != b''):
                 plainText = rsa.decrypt(inPayload, CLIENT_PRIVATE_KEY)
