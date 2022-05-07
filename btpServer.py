@@ -25,7 +25,7 @@ def decodePacket(packet):
 
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 serverSocket.bind(('', 12000))
-print("\nServer Running...")
+"\nServer Running...")
 SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = rsa.newkeys(512, accurate=True)
 TIMEOUT = 5
 BUFFER = 4096
@@ -252,5 +252,4 @@ while True:
                 drink = str(drinkData[1].lstrip())
                 drink = int(drink) - 1
                 quantity = drinkData[2]
-                print(drink)
                 addOrder(cID, drink, quantity, address)
