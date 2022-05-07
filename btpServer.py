@@ -8,43 +8,11 @@ import packetFormat
 activeClients = []
 DRINKS = [['Beer', 1.65], ['Cider', 1.40], ['Wine', 4.99], ['Vodka', 2.49], ['Whisky', 3.00] ,['Cola', 1.20]]
 
-####################
-#  RSA ENCRYPTION  #
-####################
-
-def generate_keys():
-    (pubKey, privKey) = rsa.newkeys(512, accurate=True)
-    with open('keys/pubkey.pem', 'wb') as f:
-        f.write(pubKey.save_pkcs1('PEM'))
-
-    with open('keys/privkey.pem', 'wb') as f:
-        f.write(privKey.save_pkcs1('PEM'))
-
-def load_keys():
-    with open('keys/pubkey.pem', 'rb') as f:
-        pubKey = rsa.PublicKey.load_pkcs1(f.read())
-
-    with open('keys/privkey.pem', 'rb') as f:
-        privKey = rsa.PrivateKey.load_pkcs1(f.read())
-
-    return pubKey, privKey
-
-def encrypt(msg, key):
-    return rsa.encrypt(msg.encode('ascii'), key)
-
 def decrypt(ciphertext, key):
     try:
         return rsa.decrypt(ciphertext, key).decode('ascii')
     except:
         return False
-
-#################
-#  SERVER CODE  #
-#################
-
-
-
-
 
 def decodePacket(packet):
     sequence = int.from_bytes(packet[0:4], byteorder='big')
@@ -58,8 +26,9 @@ def decodePacket(packet):
 serverSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 serverSocket.bind(('', 12000))
 print("\nServer Running...")
-generate_keys()
-SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = load_keys()
+SERVER_PUBLIC_KEY, SERVER_PRIVATE_KEY = rsa.newkeys(512, accurate=True)
+TIMEOUT = 5
+BUFFER = 4096
 
 # Method to send a simple Empty ACK message to a address
 def sendEmptyACK(s, address):
@@ -75,7 +44,7 @@ def sendEmptyFinAck(s, address):
 
 # Method to recive an empty ACK message
 def recvEmptyACK(type, s):
-    packet, address = serverSocket.recvfrom(4096)
+    packet, address = serverSocket.recvfrom(BUFFER)
     inSequence, inFlags, inLength, inPayload = decodePacket(packet)
     if inFlags[0] == 1:
         print(f'  [{s}] {type}Empty ACK recieved from Client')
@@ -86,7 +55,7 @@ def recvEmptyACK(type, s):
 
 # Method to revive an empty FIN ACK message
 def recvEmptyFinAck(s):
-    packet, address = serverSocket.recvfrom(4096)
+    packet, address = serverSocket.recvfrom(BUFFER)
     inSequence, inFlags, inLength, inPayload = decodePacket(packet)
     if inFlags[2] == 1:
         print(f'  [{s}] FIN ACK recieved from Client')
@@ -171,18 +140,18 @@ def addOrder(clientID, drink, quantity, address):
 
             print(f"  [0] Sending TOTAL {str_total} to the Client")
             message = 'TOTAL ' + str(str_total)
-            socket.timeout(2)
+            socket.timeout(TIMEOUT)
             sendOrder(message, address)
             
 
 def sendOrder(message, address):
-    socket.timeout(2)
+    socket.timeout(TIMEOUT)
     completed = False
     while not completed:
         try:
             sequence = 0
 
-            sendEmptyACK(sequence, address)
+            #sendEmptyACK(sequence, address)
 
             # Send Drink Total to Client
             p = packetFormat.packetFormat(sequence, False, False, False, None, CLIENT_PUBLIC_KEY, message)
@@ -208,9 +177,8 @@ def sendOrder(message, address):
             
     socket.timeout(None)
     print("Order Successfully added to tab")
-
 def closeClinet(message, address):
-    socket.timeout(2)
+    socket.timeout(TIMEOUT)
     sequence = 0
     completed = False
     while not completed:
@@ -243,7 +211,7 @@ while True:
     # Assigns a random amount of time to simulate packet loss
     waitTime = random.randint(0,3)
 
-    packet, address = serverSocket.recvfrom(4096)
+    packet, address = serverSocket.recvfrom(BUFFER)
     sequence, flags, length, payload = decodePacket(packet)
 
     time.sleep(waitTime)
