@@ -71,20 +71,19 @@ def rsaExchange(payload, address):
     print(payload)
     client_public_key = rsa.PublicKey.load_pkcs1(payload)
 
+    serverSocket.settimeout(TIMEOUT)
     complete = False
     while not complete:
         try:
             # Sending ACK for Reciving Client Public Key
             sequence = 0
             sendEmptyACK(sequence, address)
-
             # Sending Server Public Key to Client
             sequence = sequence + 1
             print(f"  [{sequence}] Sending Server Public Key to Client")
             server_public_key_bytes = SERVER_PUBLIC_KEY.save_pkcs1()
             p = packetFormat.packetFormat(sequence, True, True, False, None, None, server_public_key_bytes)
             serverSocket.sendto(p.getEncryptedBytes(), address)
-
             # ACKS for stop wait
             recvEmptyACK("Server Public Key", sequence)
             sequence = sequence + 1
@@ -94,10 +93,10 @@ def rsaExchange(payload, address):
             sendEmptyFinAck(sequence, address)
             complete = recvEmptyACK('',sequence)
 
-        except socket.timeout:
+        except socket.timeout as inst:
             print('  Socket Timeout, resending...')
 
-    socket.timeout(None)
+    serverSocket.settimeout(None)
     return client_public_key
 
 def newClient(client_id, address):
@@ -124,7 +123,7 @@ def newClient(client_id, address):
         except socket.timeout:
             print('  Socket Timeout, resending...')
 
-    socket.timeout(None)
+    serverSocket.settimeout(None)
    
 def addOrder(clientID, drink, quantity, address):
     print(f"\nAdding {quantity} to {DRINKS[drink][0]}(s) to {clientID}'s order")
@@ -140,12 +139,12 @@ def addOrder(clientID, drink, quantity, address):
 
             print(f"  [0] Sending TOTAL {str_total} to the Client")
             message = 'TOTAL ' + str(str_total)
-            socket.timeout(TIMEOUT)
+            serverSocket.settimeout(TIMEOUT)
             sendOrder(message, address)
             
 
 def sendOrder(message, address):
-    socket.timeout(TIMEOUT)
+    serverSocket.settimeout(TIMEOUT)
     completed = False
     while not completed:
         try:
@@ -176,12 +175,12 @@ def sendOrder(message, address):
         except socket.timeout:
             print('  Socket Timeout, resending...')
             
-    socket.timeout(None)
+    serverSocket.settimeout(None)
     print("Order Successfully added to tab")
 
 
 def closeClinet(message, address):
-    socket.timeout(TIMEOUT)
+    serverSocket.settimeout(TIMEOUT)
     sequence = 0
     completed = False
     while not completed:
@@ -208,7 +207,7 @@ def closeClinet(message, address):
 
         except socket.timeout:
             print('  Error, Socket Timeout, resending...')
-    socket.timeout(None)
+    serverSocket.settimeout(None)
 
 
 while True:
