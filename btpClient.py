@@ -91,7 +91,7 @@ def rsaExchange():
     global SERVER_PUBLIC_KEY
     sequence = 0
     completed = False
-    socket.timeout(TIMEOUT)
+    clientSocket.settimeout(TIMEOUT)
     while not completed:
         try:
             print(f"  [{sequence}] Sending RSA Client Public Key")
@@ -169,7 +169,7 @@ def openTab():
         openTab()
 
     print(f'Client {CLIENT_ID} successfully added to the bar')
-    socket.timeout(None)
+    clientSocket.settimeout(None)
 
 def closeTab():
     print(f'Closing {CLIENT_ID} tab')
@@ -181,13 +181,13 @@ def closeTab():
     p = packetFormat.packetFormat(sequence, False, False, False, None, SERVER_PUBLIC_KEY, payload)
     clientSocket.sendto(p.getEncryptedBytes(), (UDP_IP_ADDRESS, UDP_PORT_NO))
 
-    socket.timeout(TIMEOUT)
+    clientSocket.settimeout(TIMEOUT)
     completed = False
     while not completed:
         try:
             recvEmptyACK('', sequence)
             sequence += 1
-
+            recvEmptyACK('', sequence)
             packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
 
@@ -228,12 +228,12 @@ def addDrink(drink_name, drink_id, quantity):
     recvEmptyACK('', 0)
 
     plainText = 'TOTAL 0'
-    socket.timeout(TIMEOUT)
+    clientSocket.settimeout(TIMEOUT)
     completed = False
     while not completed: 
         try: 
             sequence = 1
-            socket.timeout(None)
+            clientSocket.settimeout(None)
             packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
             if(inPayload != b''):
