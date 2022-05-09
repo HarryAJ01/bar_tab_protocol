@@ -186,6 +186,7 @@ def closeTab():
     while not completed:
         try:
             recvEmptyACK('', sequence)
+            sequence += 1
 
             packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
@@ -224,14 +225,14 @@ def addDrink(drink_name, drink_id, quantity):
     p = packetFormat.packetFormat(0, False, False, False, None, SERVER_PUBLIC_KEY, payload)
     clientSocket.sendto(p.getEncryptedBytes(), (UDP_IP_ADDRESS, UDP_PORT_NO))
 
-    recvEmptyACK('', 1)
+    recvEmptyACK('', 0)
 
     plainText = 'TOTAL 0'
     socket.timeout(TIMEOUT)
     completed = False
     while not completed: 
         try: 
-            sequence = 0
+            sequence = 1
             socket.timeout(None)
             packet, address = clientSocket.recvfrom(BUFFER)
             inSequence, inFlags, inLength, inPayload = decodePacket(packet)
@@ -239,12 +240,11 @@ def addDrink(drink_name, drink_id, quantity):
                 plainText = rsa.decrypt(inPayload, CLIENT_PRIVATE_KEY)
                 
                 if(plainText == False):
-                    print("  Corrupted packet please try again")
+                    print("Corrupted packet please try again")
 
                 else:
                     plainText = plainText.decode('ASCII')
                     print(f"  [{sequence}] {plainText}")
-                    sequence = sequence + 1
                     sendEmptyACK(sequence)
                     sequence = sequence + 1
                     sendEmptyFinAck(sequence)
