@@ -178,13 +178,16 @@ def sendOrder(message, address):
             
     socket.timeout(None)
     print("Order Successfully added to tab")
+
+
 def closeClinet(message, address):
     socket.timeout(TIMEOUT)
     sequence = 0
-    completed = False
+    completed = False@
     while not completed:
         try:
-            #sendEmptyACK(sequence, address)
+            sendEmptyACK(sequence, address)
+            sequence = sequence + 1
             p = packetFormat.packetFormat(sequence, True, False, False, None, CLIENT_PUBLIC_KEY, message)
             serverSocket.sendto(p.getEncryptedBytes(), address)
 
@@ -240,12 +243,13 @@ while True:
                 client_id_full_split = client_id_full.split(" ")
                 cID = client_id_full_split[1]
 
+                
                 print(cID)
                 print(f"\nClosing Client {cID}")
                 for i in range(len(activeClients)):
                     if(activeClients[i][0] == int(cID)):
                         total = activeClients[i][1]
-                        message = 'TOTAL' + str(total)
+                        message = 'TOTAL ' + str(total)
                         closeClinet(message, address)
                         print(f"{cID} successfully removed from Server")
 
