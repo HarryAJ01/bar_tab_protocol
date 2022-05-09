@@ -183,7 +183,7 @@ def sendOrder(message, address):
 def closeClinet(message, address):
     socket.timeout(TIMEOUT)
     sequence = 0
-    completed = False@
+    completed = False
     while not completed:
         try:
             sendEmptyACK(sequence, address)
