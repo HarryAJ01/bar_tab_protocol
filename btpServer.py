@@ -236,8 +236,11 @@ while True:
                 newClient(client_id_str, address)
 
             elif split_payload[1] == 'CLOSE':
-                cID = split_payload[1]
-                cID = cID[:4]
+                client_id_full = split_payload[0]
+                client_id_full_split = client_id_full.split(" ")
+                cID = client_id_full_split[1]
+
+                print(cID)
                 print(f"\nClosing Client {cID}")
                 for i in range(len(activeClients)):
                     if(activeClients[i][0] == int(cID)):
